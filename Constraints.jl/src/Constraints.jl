@@ -110,19 +110,6 @@ function min_solution(vars::Vector{Variable})
     [SealedArray(copy(v.domain.lower)) for v in vars]))
 end
     
-# function increment!(potential_solution::PotentialSolution, increment_index::Integer, min::Vector{Int}, max::Vector{Int})
-#      for i = 1:increment_index-1
-#         potential_solution[i] = min[i]
-#     end
-#     potential_solution[increment_index] += 1
-#     for i = increment_index:length(min)-1
-#         if potential_solution[i] > max[i]
-#             potential_solution[i] = min[i]
-#             potential_solution[i+1] += 1
-#         end
-#     end
-# end
-
 function solve(prob::Problem, max_solutions=Inf)
     lower, upper = collect_domains(prob.vars)
     @assert length(lower) == length(upper)
@@ -219,71 +206,13 @@ function solve(prob::Problem, max_solutions=Inf)
                 break
             end
         end
-#                 increment!(potential_solution, increment_index, lower, upper)
         if solution_data[increment_order[numvar]] > upper[increment_order[numvar]]
             finished = true
             break
         end
         num_nodes_explored += 1
-#         else
-            
-#         end
-        
 
-#         else
-#             constraint = prob.constraints[1]
-#             seal!(potential_solution)
-#             if !constraint.func([potential_solution[v] for v in constraint.vars]...)
-#                 solution_ok = false
-#             end
-#             check_seals!(touched, potential_solution)
-#             constraint.estimated_quality = findfirst(touched)
-#             if solution_ok
-#                 increment_index = constraint.estimated_quality
-#             end
-#         end
-                
-# #         for constraint in prob.constraints
-# #             @show potential_solution
-# #             @show solution_data
-#             seal!(potential_solution)
-#             if constraint.func([potential_solution[v] for v in constraint.vars]...)
-#                 num_satisfied_constraints += 1
-#                 if num_satisfied_constraints == length(prob.constraints)
-#                     push!(solutions, extract_solution(potential_solution))
-#                     increment_index = 1
-#                 else
-#                     increment_index = 0
-#                 end
-#             else
-#                 num_satisfied_constraints = 0
-#                 check_seals!(touched, potential_solution)
-# #                 @show touched
-#                 increment_index = findfirst(touched)
-#             end
-#             if increment_index > 0
-#                 for i = 1:increment_index-1
-#                     solution_data[i] = lower[i]
-#                 end
-#                 solution_data[increment_index] += 1
-#                 for i = increment_index:length(lower)-1
-#                     if solution_data[i] > upper[i]
-#                         solution_data[i] = lower[i]
-#                         solution_data[i+1] += 1
-#                     end
-#                 end
-# #                 increment!(potential_solution, increment_index, lower, upper)
-#                 if solution_data[numvar] > upper[numvar]
-#                     finished = true
-#                     break
-#                 end
-#                 num_nodes_explored += 1
-#             end
-#         end
         iteration += 1
-        # if iteration % 1e5 == 0
-        #     @show potential_solution
-        # end
     end
     @show num_nodes_explored
     solutions
@@ -309,29 +238,6 @@ end
 function extract_solution(solution::PotentialSolution)
     result = Dict(zip(keys(solution), map(v -> reshape(copy(v.data), v.dims), values(solution))))
 end
-        
-# function getindex(solution::PotentialSolution, index::Number)
-#     offset = 0
-#     for (k, v) in solution
-#         numel = length(v)
-#         if index <= offset + numel
-#             return v[index - offset]
-#         end
-#         offset += numel
-#     end
-# end
-
-# function setindex!(solution::OrderedDict{Symbol, SealedArray}, value, index::Number)
-#     offset = 0
-#     for (k, v) in solution
-#         numel = length(v)
-#         if index <= offset + numel
-#             v[index - offset] = value
-#             break
-#         end
-#         offset += numel
-#     end
-# end
     
 end
 
