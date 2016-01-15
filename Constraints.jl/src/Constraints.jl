@@ -151,7 +151,24 @@ function solve(prob::Problem, max_solutions=Inf)
     iteration = 0
     exploring = true 
     solution_ok = true
-    varible_order = 1:numvar
+
+    increment_order = 1:numvar
+    for constraint in prob.constraints
+        seal!(potential_solution)
+        constraint.func([potential_solution[v] for v in constraint.vars]...)
+        check_seals!(touched, potential_solution)
+        constraint.estimated_quality = numvar - sum(touched)
+    end    
+
+    sort!(prob.constraints, by=c->c.estimated_quality, rev=true)
+    cumulative_touches = falses(size(touched))
+    for constraint in prob.constraints
+        seal!(potential_solution)
+        constraint.func([potential_solution[v] for v in constraint.vars]...)
+        check_seals!(touched, potential_solution)
+        cumulative_touches = cumulative_touches | touched
+        increment_order = increment_order[sortperm(cumulative_touches[increment_order])]
+    end
     
     while length(solutions) < max_solutions && !finished
         if iteration % 1000 == 0
@@ -169,7 +186,7 @@ function solve(prob::Problem, max_solutions=Inf)
             else
                 solution_ok = false
                 check_seals!(touched, potential_solution)
-                constraint.estimated_quality = findfirst(touched)
+                constraint.estimated_quality = findfirst(touched[increment_order])
             end
             if !solution_ok
                 increment_index = max(increment_index, constraint.estimated_quality)
@@ -190,18 +207,20 @@ function solve(prob::Problem, max_solutions=Inf)
         
         @assert increment_index > 0
         for i = 1:increment_index-1
-            solution_data[i] = lower[i]
+            solution_data[increment_order[i]] = lower[increment_order[i]]
         end
-        solution_data[increment_index] += 1
+        solution_data[increment_order[increment_index]] += 1
         for i = increment_index:length(lower)-1
-            if solution_data[i] > upper[i]
-                solution_data[i] = lower[i]
-                solution_data[i+1] += 1
+            j = increment_order[i]
+            if solution_data[j] > upper[j]
+                solution_data[j] = lower[j]
+                solution_data[increment_order[i+1]] += 1
             else
                 break
             end
         end
-        if solution_data[numvar] > upper[numvar]
+#                 increment!(potential_solution, increment_index, lower, upper)
+        if solution_data[increment_order[numvar]] > upper[increment_order[numvar]]
             finished = true
             break
         end
@@ -262,9 +281,9 @@ function solve(prob::Problem, max_solutions=Inf)
 #             end
 #         end
         iteration += 1
-        if iteration % 1e5 == 0
-            @show potential_solution
-        end
+        # if iteration % 1e5 == 0
+        #     @show potential_solution
+        # end
     end
     @show num_nodes_explored
     solutions
