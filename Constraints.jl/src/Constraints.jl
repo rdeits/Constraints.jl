@@ -82,14 +82,24 @@ function addVariable!(p::Problem, name::Symbol, lower::Array{Int}, upper::Array{
     @assert length(upper) == length(lower)
     upper = reshape(upper, size(lower))
     push!(p.vars, Variable(name, Domain(lower, upper)))
+    name
 end
  
 function addConstraint!(p::Problem, vars::Vector{Symbol}, func::Function)
     push!(p.constraints, Constraint(vars, func))
 end
+
+addConstraint!(p::Problem, var::Symbol, func::Function) = addConstraint!(p, [var], func)
     
 typealias PotentialSolution Dict{Symbol, SealedArray}
 typealias Solution Dict{Symbol, Array}
+
+num_variables(sol::PotentialSolution) = sum([length(var) for (key, var) in sol])
+
+type Results
+    solutions::Vector{Solution}
+    num_nodes_explored
+end
 
 function collect_domains(vars::Vector{Variable})
     total_vars = sum([length(v) for v in vars])
@@ -110,35 +120,9 @@ function min_solution(vars::Vector{Variable})
     [SealedArray(copy(v.domain.lower)) for v in vars]))
 end
     
-function solve(prob::Problem, max_solutions=Inf)
-    lower, upper = collect_domains(prob.vars)
-    @assert length(lower) == length(upper)
-    @assert length(prob.constraints) > 0
-    numvar = length(lower)
+function choose_increment_order(prob::Problem, potential_solution::PotentialSolution)
+    numvar = num_variables(potential_solution)
     touched = Array(Bool, numvar)
-    solution_data = copy(lower)
-    potential_solution = PotentialSolution()
-    offset = 0
-    for v in prob.vars
-#         @show solution_data
-#         @show length(v)
-        subview = sub(solution_data, offset+(1:length(v)))
-#         @show subview
-#         reshaped_view = myreshape(subview, size(v.domain.lower))
-#         @show reshaped_view
-        potential_solution[v.name] = SealedArray(subview, size(v.domain.lower))
-        offset += length(v)
-    end
-#     potential_solution = min_solution(prob.vars)
-    solutions = Solution[]
-    num_satisfied_constraints = 0
-    finished = false
-    increment_index = 0
-    num_nodes_explored = 1
-    iteration = 0
-    exploring = true 
-    solution_ok = true
-
     increment_order = 1:numvar
     for constraint in prob.constraints
         seal!(potential_solution)
@@ -156,9 +140,43 @@ function solve(prob::Problem, max_solutions=Inf)
         cumulative_touches = cumulative_touches | touched
         increment_order = increment_order[sortperm(cumulative_touches[increment_order])]
     end
+    increment_order
+end
+
+function create_solution_view(prob::Problem, solution_data)
+    potential_solution = PotentialSolution()
+    offset = 0
+    for v in prob.vars
+        subview = sub(solution_data, offset+(1:length(v)))
+        potential_solution[v.name] = SealedArray(subview, size(v.domain.lower))
+        offset += length(v)
+    end
+    potential_solution
+end
+
+function solve(prob::Problem, max_solutions=Inf)
+    lower, upper = collect_domains(prob.vars)
+    @assert length(lower) == length(upper)
+    @assert length(prob.constraints) > 0
+    numvar = length(lower)
+    touched = Array(Bool, numvar)
+    solution_data = copy(lower)
+    solutions = Solution[]
+    num_satisfied_constraints = 0
+    finished = false
+    increment_index = 0
+    num_nodes_explored = 1
+    iteration = 0
+    # exploring = true 
+    solution_ok = true
+
+    potential_solution = create_solution_view(prob, solution_data)
+    increment_order = choose_increment_order(prob, potential_solution)
+
     
     while length(solutions) < max_solutions && !finished
-        if iteration % 1000 == 0
+        # @show potential_solution[:poses].data
+        if iteration % 1 == 0
             exploring = true
         else
             exploring = false
@@ -168,7 +186,8 @@ function solve(prob::Problem, max_solutions=Inf)
         solution_ok = true
         for constraint in prob.constraints
             seal!(potential_solution)
-            if constraint.func([potential_solution[v] for v in constraint.vars]...)
+            args = [potential_solution[v] for v in constraint.vars]
+            if constraint.func(args...)
                 constraint.estimated_quality = 0
             else
                 solution_ok = false
@@ -214,8 +233,7 @@ function solve(prob::Problem, max_solutions=Inf)
 
         iteration += 1
     end
-    @show num_nodes_explored
-    solutions
+    Results(solutions, num_nodes_explored)
 end
     
 function seal!(potential::PotentialSolution) 
